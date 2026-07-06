@@ -1,0 +1,32 @@
+name: Deploy Bye-Laws Register to Pages
+
+on:
+  push:
+    branches:
+      - master
+      - claude/code-brief-review-wlcjx1
+    paths:
+      - "bylaws-review/output/**"
+  workflow_dispatch:
+
+permissions:
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: bylaws-review/output
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bye-Laws Review Register</title>
+<style>
+  :root {
+    --bg: #f7f7f5; --card: #ffffff; --border: #e5e5e0; --text: #1f2320; --muted: #6b7169;
+    --fix: #2e9e5b; --fix-bg: #eaf7ef; --flagged: #b8860b; --flagged-bg: #fdf3e0;
+    --chip-bg: #eef0ee; --chip-active: #33413a; --chip-active-text: #ffffff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #14161a; --card: #1c1f24; --border: #2c3036; --text: #e7e9ea; --muted: #9aa0a6;
+      --fix-bg: #10241a; --flagged-bg: #2a2010; --chip-bg: #262a30; --chip-active: #e7e9ea; --chip-active-text: #14161a; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  .wrap { max-width: 920px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .subtitle { color: var(--muted); font-size: 13px; margin-bottom: 20px; }
+
+  .stats { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; }
+  .stat { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 10px 16px; min-width: 90px; }
+  .stat .n { font-size: 20px; font-weight: 700; }
+  .stat .l { font-size: 12px; color: var(--muted); }
+
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+  input[type="text"], select { background: var(--card); color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px 10px; font-size: 14px; }
+  input[type="text"] { flex: 1; min-width: 180px; }
+
+  .active-filter { display: none; align-items: center; gap: 6px; background: var(--chip-active); color: var(--chip-active-text);
+    border-radius: 999px; padding: 4px 10px 4px 12px; font-size: 13px; margin-bottom: 12px; }
+  .active-filter button { background: none; border: none; color: inherit; cursor: pointer; font-size: 14px; padding: 0 2px; }
+
+  .entry { background: var(--card); border: 1px solid var(--border); border-left-width: 5px; border-radius: 8px;
+    margin-bottom: 10px; padding: 12px 14px; cursor: pointer; }
+  .entry.fix { border-left-color: var(--fix); }
+  .entry.flagged { border-left-color: var(--flagged); }
+  .entry-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+  .clause { font-weight: 700; font-size: 13px; color: var(--muted); }
+  .badge { display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; margin-left: 8px; }
+  .badge.fix { background: var(--fix-bg); color: var(--fix); }
+  .badge.flagged { background: var(--flagged-bg); color: var(--flagged); }
+  .category { font-size: 12px; color: var(--muted); }
+  .query { margin-top: 6px; font-size: 14px; }
+  .chips { margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap; }
+  .chip { background: var(--chip-bg); border-radius: 999px; padding: 3px 10px; font-size: 12px; cursor: pointer; }
+  .chip:hover { opacity: 0.8; }
+  .response { display: none; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); font-size: 14px; white-space: pre-wrap; }
+  .entry.open .response { display: block; }
+  .empty { color: var(--muted); text-align: center; padding: 40px 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Bye-Laws Review Register</h1>
+  <div class="subtitle">Owner comments on the draft bye-laws, tracked clause by clause.</div>
+
+  <div class="stats" id="stats"></div>
+
+  <div class="active-filter" id="ownerFilterPill">
+    Filtered by owner: <span id="ownerFilterName"></span>
+    <button id="clearOwnerFilter">&times;</button>
+  </div>
+
+  <div class="controls">
+    <input type="text" id="search" placeholder="Search clause, query, response, owner...">
+    <select id="categoryFilter"><option value="">All categories</option></select>
+    <select id="statusFilter">
+      <option value="">All statuses</option>
+      <option value="fix">Fix</option>
+      <option value="flagged">Flagged</option>
+    </select>
+  </div>
+
+  <div id="list"></div>
+  <div class="empty" id="emptyState" style="display:none;">No entries match the current filters.</div>
+</div>
+
+<script id="register-data" type="application/json">__DATA_JSON__</script>
+<script>
+  const data = JSON.parse(document.getElementById('register-data').textContent);
+  const state = { search: '', category: '', status: '', owner: '' };
+
+  const statsEl = document.getElementById('stats');
+  const listEl = document.getElementById('list');
+  const emptyEl = document.getElementById('emptyState');
+  const categoryFilter = document.getElementById('categoryFilter');
+  const statusFilter = document.getElementById('statusFilter');
+  const searchEl = document.getElementById('search');
+  const ownerPill = document.getElementById('ownerFilterPill');
+  const ownerName = document.getElementById('ownerFilterName');
+
+  const categories = [...new Set(data.map(e => e.category).filter(Boolean))].sort();
+  for (const c of categories) {
+    const opt = document.createElement('option');
+    opt.value = c; opt.textContent = c;
+    categoryFilter.appendChild(opt);
+  }
+
+  function renderStats() {
+    const total = data.length;
+    const fixes = data.filter(e => e.status === 'fix').length;
+    const flagged = data.filter(e => e.status === 'flagged').length;
+    statsEl.innerHTML = [
+      ['Total', total], ['Fix', fixes], ['Flagged', flagged],
+    ].map(([label, n]) => `<div class="stat"><div class="n">${n}</div><div class="l">${label}</div></div>`).join('');
+  }
+
+  function matches(entry) {
+    if (state.status && entry.status !== state.status) return false;
+    if (state.category && entry.category !== state.category) return false;
+    if (state.owner && !(entry.raisedBy || []).includes(state.owner)) return false;
+    if (state.search) {
+      const haystack = [entry.clause, entry.category, entry.query, entry.response, ...(entry.raisedBy || [])]
+        .join(' ').toLowerCase();
+      if (!haystack.includes(state.search.toLowerCase())) return false;
+    }
+    return true;
+  }
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, ch => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+    }[ch]));
+  }
+
+  function render() {
+    renderStats();
+    const filtered = data.filter(matches);
+    ownerPill.style.display = state.owner ? 'inline-flex' : 'none';
+    ownerName.textContent = state.owner;
+    emptyEl.style.display = filtered.length ? 'none' : 'block';
+
+    listEl.innerHTML = filtered.map(entry => `
+      <div class="entry ${entry.status === 'fix' ? 'fix' : 'flagged'}" data-id="${esc(entry.id)}">
+        <div class="entry-head">
+          <div>
+            <span class="clause">§${esc(entry.clause)}</span>
+            <span class="category">${esc(entry.category || '')}</span>
+          </div>
+          <span class="badge ${entry.status === 'fix' ? 'fix' : 'flagged'}">${entry.status === 'fix' ? 'Fix' : 'Flagged'}</span>
+        </div>
+        <div class="query">${esc(entry.query)}</div>
+        <div class="chips">
+          ${(entry.raisedBy || []).map(name => `<span class="chip" data-owner="${esc(name)}">${esc(name)}</span>`).join('')}
+        </div>
+        <div class="response">${esc(entry.response)}</div>
+      </div>
+    `).join('');
+  }
+
+  listEl.addEventListener('click', (e) => {
+    const chip = e.target.closest('.chip');
+    if (chip) {
+      e.stopPropagation();
+      state.owner = chip.dataset.owner;
+      render();
+      return;
+    }
+    const entry = e.target.closest('.entry');
+    if (entry) entry.classList.toggle('open');
+  });
+
+  document.getElementById('clearOwnerFilter').addEventListener('click', () => {
+    state.owner = '';
+    render();
+  });
+  searchEl.addEventListener('input', (e) => { state.search = e.target.value; render(); });
+  categoryFilter.addEventListener('change', (e) => { state.category = e.target.value; render(); });
+  statusFilter.addEventListener('change', (e) => { state.status = e.target.value; render(); });
+
+  render();
+</script>
+</body>
+</html>
